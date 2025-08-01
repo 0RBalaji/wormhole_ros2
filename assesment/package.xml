@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>assesment</name>
+  <version>0.0.0</version>
+  <description>Multi-map navigation with wormhole support using PostgreSQL and ROS 2 action server.</description>
+  <maintainer email="rajalbandi2balaji@gmail.com">R_Balaji</maintainer>
+  <license>Apache-2.0</license>
+
+  <!-- Build tools -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- Build dependencies -->
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>nav2_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>action_msgs</depend>
+  <depend>rosidl_default_generators</depend>
+
+  <!-- <depend>wormhole_action</depend> -->
+
+  <build_depend>wormhole_action</build_depend>
+  <exec_depend>wormhole_action</exec_depend>
+
+  <build_depend>libpq-dev</build_depend>
+
+  <exec_depend>libpq-dev</exec_depend>
+
+  <!-- Action interface grouping -->
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <gazebo_ros gazebo_model_path="/home/balaji/anscer_assesment/install/assesment/share/" />
+  </export>
+</package>
