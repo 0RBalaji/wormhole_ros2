@@ -1,8 +1,7 @@
 #include "assesment/database_manager.hpp"
 #include <iostream>
 #include <sstream>
-// #include <queue>
-// #include <map>
+
 #include <libpq-fe.h>
 
 DatabaseManager::DatabaseManager(const std::string& connection_string)
@@ -32,18 +31,21 @@ void DatabaseManager::disconnect() {
 
 std::vector<WormholeData> DatabaseManager::getWormholes(const std::string& from_map, const std::string& to_map) {
     std::vector<WormholeData> wormholes;
-    
+
     if (!connection_) {
         std::cerr << "No database connection." << std::endl;
         return wormholes;
     }
 
     std::stringstream query;
-    query << "SELECT map1_name, map2_name, map1_position_x, map1_position_y, map1_orientation_z, map1_orientation_w, "
-          << "map2_position_x, map2_position_y, map2_orientation_z, map2_orientation_w FROM wormholes "
-          << "WHERE (map1_name = '" << from_map << "' AND map2_name = '" << to_map << "') "
-          << "OR (map1_name = '" << to_map << "' AND map2_name = '" << from_map << "')";
-    
+    query << "SELECT map1_name, map2_name, "
+          << "map1_position_x, map1_position_y, map1_orientation_z, map1_orientation_w, "
+          << "map2_position_x, map2_position_y, map2_orientation_z, map2_orientation_w "
+          << "FROM wormholes "
+          << "WHERE (map1_name = '" << from_map << "' AND map2_name = '" << to_map << "')";
+
+    std::cout << "Executing wormhole query: " << query.str() << std::endl;
+
     PGresult* res = PQexec(connection_, query.str().c_str());
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         std::cerr << "Failed to fetch wormholes: " << PQerrorMessage(connection_) << std::endl;
@@ -66,6 +68,7 @@ std::vector<WormholeData> DatabaseManager::getWormholes(const std::string& from_
         wh.map2_ow = std::stod(PQgetvalue(res, i, 9));
         wormholes.push_back(wh);
     }
+
     PQclear(res);
     return wormholes;
 }
@@ -75,22 +78,32 @@ bool DatabaseManager::insertWormhole(const WormholeData& wormhole) {
         std::cerr << "No database connection." << std::endl;
         return false;
     }
-    
+
+    // Store to_string results in std::string variables
+    std::string map1_x_str = std::to_string(wormhole.map1_x);
+    std::string map1_y_str = std::to_string(wormhole.map1_y);
+    std::string map1_oz_str = std::to_string(wormhole.map1_oz);
+    std::string map1_ow_str = std::to_string(wormhole.map1_ow);
+    std::string map2_x_str = std::to_string(wormhole.map2_x);
+    std::string map2_y_str = std::to_string(wormhole.map2_y);
+    std::string map2_oz_str = std::to_string(wormhole.map2_oz);
+    std::string map2_ow_str = std::to_string(wormhole.map2_ow);
+
     const char* paramValues[] = {
         wormhole.map1_name.c_str(),
         wormhole.map2_name.c_str(),
-        std::to_string(wormhole.map1_x).c_str(),
-        std::to_string(wormhole.map1_y).c_str(),
-        std::to_string(wormhole.map1_oz).c_str(),
-        std::to_string(wormhole.map1_ow).c_str(),
-        std::to_string(wormhole.map2_x).c_str(),
-        std::to_string(wormhole.map2_y).c_str(),
-        std::to_string(wormhole.map2_oz).c_str(),
-        std::to_string(wormhole.map2_ow).c_str()
+        map1_x_str.c_str(),
+        map1_y_str.c_str(),
+        map1_oz_str.c_str(),
+        map1_ow_str.c_str(),
+        map2_x_str.c_str(),
+        map2_y_str.c_str(),
+        map2_oz_str.c_str(),
+        map2_ow_str.c_str()
     };
 
     PGresult* res = PQexecParams(connection_,
-        "INSERT INTO wormholes (map1_name, map2_name, map1_position_x, map1_position_y, map1_orientation_z, map1_orientation_w,"
+        "INSERT INTO wormholes (map1_name, map2_name, map1_position_x, map1_position_y, map1_orientation_z, map1_orientation_w, "
         "map2_position_x, map2_position_y, map2_orientation_z, map2_orientation_w) "
         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         10, nullptr, paramValues, nullptr, nullptr, 0);
@@ -100,6 +113,7 @@ bool DatabaseManager::insertWormhole(const WormholeData& wormhole) {
         PQclear(res);
         return false;
     }
+
     PQclear(res);
     return true;
 }

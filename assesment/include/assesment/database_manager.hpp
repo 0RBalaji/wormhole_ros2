@@ -4,6 +4,9 @@
 #include <libpq-fe.h>
 #include <string>
 #include <vector>
+#include <rclcpp/rclcpp.hpp>
+// #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
+#include <nlohmann/json.hpp>
 
 struct WormholeData {
     std::string map1_name;

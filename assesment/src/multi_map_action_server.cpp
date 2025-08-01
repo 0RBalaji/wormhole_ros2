@@ -8,6 +8,7 @@
 #include <chrono>
 #include <std_msgs/msg/float64.hpp>
 #include <thread>
+#include <nav2_msgs/srv/load_map.hpp>
 
 using NavigateMultiMap = wormhole_action::action::NavigateMultiMap;
 
@@ -16,19 +17,14 @@ using namespace std::chrono_literals;
 MultiMapActionServer::MultiMapActionServer()
 : Node("multi_map_action_server") {
     std::cout << "Entered MultiMapActionServer constructor..." << std::endl;
-    RCLCPP_INFO(this->get_logger(), "Initializing MultiMapActionServer...");
     auto connection_str = this->declare_parameter<std::string>("database_connection", "host=localhost dbname=wormhole_database user=headuser password=sqlpass123");
     db_manager_ = std::make_shared<DatabaseManager>(connection_str);
     db_manager_->connect();
     std::cout << "DatabaseManager connected." << std::endl;
 
-    map_loader_client_ = this->create_client<nav_msgs::srv::LoadMap>("/map_server/load_map");
+    map_loader_client_ = this->create_client<nav2_msgs::srv::LoadMap>("/map_server/load_map");
 
-
-    nav2_client_ = rclcpp_action::create_client<nav2_msgs::action::NavigateToPose>(
-        this, "navigate_to_pose");
-    
-    RCLCPP_INFO(this->get_logger(), "Now Serious, OK?");
+    nav2_client_ = rclcpp_action::create_client<nav2_msgs::action::NavigateToPose>(this, "navigate_to_pose");
 
     if (!nav2_client_->wait_for_action_server(5s)) {
         RCLCPP_WARN(this->get_logger(), "Nav2 action server not available after 5 seconds.");
@@ -38,7 +34,7 @@ MultiMapActionServer::MultiMapActionServer()
 
     action_server_ = rclcpp_action::create_server<NavigateMultiMap>(
         this,
-        "navigate_multi_map",
+        "multi_map_action_server",
         std::bind(&MultiMapActionServer::handle_goal, this, std::placeholders::_1, std::placeholders::_2),
         std::bind(&MultiMapActionServer::handle_cancel, this, std::placeholders::_1),
         std::bind(&MultiMapActionServer::handle_accepted, this, std::placeholders::_1)
@@ -48,7 +44,11 @@ MultiMapActionServer::MultiMapActionServer()
     init_pose_pub = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/initialpose", 10);
 
     // Optionally initialize current_map_name_ if needed
-    current_map_name_ = "";
+    current_map_name_ = "map_1";
+    
+    if (!map_loader_client_->wait_for_service(10s)) {
+		RCLCPP_WARN(this->get_logger(), "Map server not available during initialization");
+	}
 
     RCLCPP_INFO(this->get_logger(), "MultiMapActionServer initialized.");
 }
@@ -68,11 +68,11 @@ rclcpp_action::CancelResponse MultiMapActionServer::handle_cancel(
 void MultiMapActionServer::handle_accepted(
     const std::shared_ptr<rclcpp_action::ServerGoalHandle<NavigateMultiMap>> goal_handle) {
     RCLCPP_INFO(this->get_logger(), "Goal accepted, executing.");
+    // execute(goal_handle);
     std::thread{std::bind(&MultiMapActionServer::execute, this, goal_handle)}.detach();
 }
 
 void MultiMapActionServer::execute(const std::shared_ptr<rclcpp_action::ServerGoalHandle<NavigateMultiMap>> goal_handle) {
-    RCLCPP_INFO(this->get_logger(), "Executing goal.");
     const std::shared_ptr<rclcpp_action::ServerGoalHandle<wormhole_action::action::NavigateMultiMap>> goal_handle_ptr = goal_handle;
     
     const auto goal = goal_handle_ptr->get_goal();
@@ -119,6 +119,7 @@ void MultiMapActionServer::execute(const std::shared_ptr<rclcpp_action::ServerGo
     }
     
     feedback->status = "Wormhole reached, switching maps.";
+    RCLCPP_INFO(this->get_logger(), "Wormhole Reached");
     goal_handle_ptr->publish_feedback(feedback);
     if(!switchMap(goal->target_map_name, wh)){
         result->success = false;
@@ -126,6 +127,8 @@ void MultiMapActionServer::execute(const std::shared_ptr<rclcpp_action::ServerGo
         goal_handle_ptr->abort(result);
         return;
     }
+    
+    // RCLCPP_INFO(this->get_logger(), "Map %s loaded successfully.", new_map.c_str());
     
     feedback->status = "Navigating to target pose in " + goal->target_map_name;
     goal_handle_ptr->publish_feedback(feedback);
@@ -140,17 +143,13 @@ void MultiMapActionServer::execute(const std::shared_ptr<rclcpp_action::ServerGo
     RCLCPP_INFO(this->get_logger(), "Navigation to target pose successful.");
     result->success = true;
     result->message = "Navigation to target pose successful.";
-    final_nav ? goal_handle_ptr->succeed(result) : goal_handle_ptr->abort(result);
+//     final_nav ? goal_handle_ptr->succeed(result) : goal_handle_ptr->abort(result);
+	goal_handle_ptr->succeed(result);
 }
 
 bool MultiMapActionServer::navigateTo(const geometry_msgs::msg::PoseStamped& pose) {
     RCLCPP_INFO(this->get_logger(), "Navigating to pose: (%.2f, %.2f)", pose.pose.position.x, pose.pose.position.y);
-    if (!nav2_client_) {
-        RCLCPP_ERROR(this->get_logger(), "Nav2 client not initialized.");
-        return false;
-    }
-
-    if (!nav2_client_->wait_for_action_server(5s)) {
+    if (!nav2_client_ || !nav2_client_->wait_for_action_server(5s)) {
         RCLCPP_ERROR(this->get_logger(), "Nav2 action server unavailable.");
         return false;
     }
@@ -158,47 +157,47 @@ bool MultiMapActionServer::navigateTo(const geometry_msgs::msg::PoseStamped& pos
     auto goal_msg = nav2_msgs::action::NavigateToPose::Goal();
     goal_msg.pose = pose;
 
-    auto future_result = nav2_client_->async_send_goal(goal_msg);
-    if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future_result, 60s) != rclcpp::FutureReturnCode::SUCCESS) {
-        RCLCPP_ERROR(this->get_logger(), "Failed to send goal to Nav2.");
+    auto goal_handle_future = nav2_client_->async_send_goal(goal_msg);
+    if (goal_handle_future.wait_for(60s) != std::future_status::ready) {
+        RCLCPP_ERROR(this->get_logger(), "Timeout while sending Nav2 goal.");
         return false;
     }
 
-    auto result = nav2_client_->async_get_result(future_result.get());
-    if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), result, 120s) != rclcpp::FutureReturnCode::SUCCESS) {
-        RCLCPP_ERROR(this->get_logger(), "Navigation execution failed.");
+    auto goal_handle = goal_handle_future.get();
+    if (!goal_handle) {
+        RCLCPP_ERROR(this->get_logger(), "Nav2 goal was rejected.");
         return false;
     }
 
-    // Check if the result is returned in this method only or not
-    if (result.get().code == rclcpp_action::ResultCode::SUCCEEDED) {
-        return true;
-    } else {
+    auto result_future = nav2_client_->async_get_result(goal_handle);
+    if (result_future.wait_for(120s) != std::future_status::ready) {
+        RCLCPP_ERROR(this->get_logger(), "Timeout while waiting for Nav2 result.");
         return false;
     }
+
+    auto result = result_future.get();
+    return result.code == rclcpp_action::ResultCode::SUCCEEDED;
 }
 
 bool MultiMapActionServer::switchMap(const std::string& new_map, const WormholeData& wh) {
     RCLCPP_INFO(this->get_logger(), "Switching to map: %s", new_map.c_str());
-    if (!map_loader_client_) {
-        RCLCPP_ERROR(this->get_logger(), "Map loader client not initialized.");
-        return false;
-    }
-    if (!map_loader_client_->wait_for_service(5s)) {
+    if (!map_loader_client_ || !map_loader_client_->wait_for_service(10s)) {
         RCLCPP_ERROR(this->get_logger(), "Map load service unavailable.");
         return false;
     }
+	
+    auto request = std::make_shared<nav2_msgs::srv::LoadMap::Request>();
+    request->map_url = "/home/balaji/anscer_assesment/src/assesment/maps/" + new_map + ".yaml";
 
-    auto request = std::make_shared<nav_msgs::srv::LoadMap::Request>();
-    request->map_url = "/maps/" + new_map + ".yaml";
+	RCLCPP_INFO(this->get_logger(), "Map URL: %s", request->map_url.c_str());
 
     auto future = map_loader_client_->async_send_request(request);
-    if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future, 10s) != rclcpp::FutureReturnCode::SUCCESS) {
-        RCLCPP_ERROR(this->get_logger(), "Map load failed.");
+    if (future.wait_for(10s) != std::future_status::ready) {
+        RCLCPP_ERROR(this->get_logger(), "Map load request timeout.");
         return false;
     }
 
-    // auto init_pose_pub = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/initialpose", 10);
+    // Set initial pose
     geometry_msgs::msg::PoseWithCovarianceStamped init_pose;
     init_pose.header.stamp = this->now();
     init_pose.header.frame_id = "map";
@@ -216,16 +215,15 @@ bool MultiMapActionServer::switchMap(const std::string& new_map, const WormholeD
     return true;
 }
 
-int main(int argc, char * argv[])
+int main(int argc, char **argv)
 {
-    std::cout << "Starting MultiMapActionServer..." << std::endl;
     rclcpp::init(argc, argv);
-    std::cout << "RCLCPP initialized." << std::endl;
     auto node = std::make_shared<MultiMapActionServer>();
-    std::cout << "MultiMapActionServer node created." << std::endl;
-    // RCLCPP_INFO(rclcpp::get_logger("MultiMapActionServer"), "Initializing MultiMapActionServer...");
-    std::cout << "MultiMapActionServer initialized. Will Spin Now" << std::endl;
-    rclcpp::spin(node);
+
+    rclcpp::executors::MultiThreadedExecutor executor;
+    executor.add_node(node);
+    RCLCPP_INFO(node->get_logger(), "MultiMapActionServer node created.");
+    executor.spin();
     rclcpp::shutdown();
     return 0;
 }

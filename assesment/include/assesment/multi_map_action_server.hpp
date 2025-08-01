@@ -5,7 +5,7 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
-#include <nav_msgs/srv/load_map.hpp>
+#include <nav2_msgs/srv/load_map.hpp>
 #include <nav2_msgs/action/navigate_to_pose.hpp>
 #include "assesment/database_manager.hpp"
 #include "wormhole_action/action/navigate_multi_map.hpp"  // Auto-generated
@@ -13,6 +13,9 @@
 class MultiMapActionServer : public rclcpp::Node {
 public:
     MultiMapActionServer();
+    ~MultiMapActionServer() = default;
+
+    // void init();
 
 private:
     using NavigateMultiMap = wormhole_action::action::NavigateMultiMap;
@@ -20,7 +23,7 @@ private:
     rclcpp_action::Server<NavigateMultiMap>::SharedPtr action_server_;
     std::shared_ptr<DatabaseManager> db_manager_;
 
-    rclcpp::Client<nav_msgs::srv::LoadMap>::SharedPtr map_loader_client_;
+    rclcpp::Client<nav2_msgs::srv::LoadMap>::SharedPtr map_loader_client_;
     rclcpp_action::Client<nav2_msgs::action::NavigateToPose>::SharedPtr nav2_client_;
 
     // Add publisher as class member

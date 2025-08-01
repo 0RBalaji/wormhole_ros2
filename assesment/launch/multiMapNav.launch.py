@@ -20,9 +20,9 @@ def generate_launch_description():
     # Create the launch configuration variables
     map_yaml_file = LaunchConfiguration('map')
     use_sim_time = LaunchConfiguration('use_sim_time')
-    world = PathJoinSubstitution([pkg_path, 'worlds', 'multihouse.world'])
+    world = PathJoinSubstitution([pkg_path, 'worlds', 'model.world'])
 
-    map_yaml_file = os.path.join(pkg_path, 'maps', 'map_a.yaml')
+    map_yaml_file = os.path.join(pkg_path, 'maps', 'map_1.yaml')
 
     urdf_file = os.path.join(get_package_share_directory('turtlebot3_description'), 'urdf', 'turtlebot3_waffle_pi.urdf')
 
@@ -42,8 +42,8 @@ def generate_launch_description():
     description='Model type [burger, waffle, waffle_pi]')
     
     declare_pose_cmds = [
-        DeclareLaunchArgument('x_pose', default_value='3.5', description='X position'),
-        DeclareLaunchArgument('y_pose', default_value='1.5', description='Y position'),
+        DeclareLaunchArgument('x_pose', default_value='1.47', description='X position'),
+        DeclareLaunchArgument('y_pose', default_value='6.46', description='Y position'),
         DeclareLaunchArgument('z_pose', default_value='0.05', description='Z position'),
         DeclareLaunchArgument('roll', default_value='0.00', description='Roll'),
         DeclareLaunchArgument('pitch', default_value='0.00', description='Pitch'),
@@ -51,8 +51,8 @@ def generate_launch_description():
     ]
     
     pose = {
-        'x': LaunchConfiguration('x_pose', default='3.5'),
-        'y': LaunchConfiguration('y_pose', default='1.5'),
+        'x': LaunchConfiguration('x_pose', default='1.47'),
+        'y': LaunchConfiguration('y_pose', default='6.46'),
         'z': LaunchConfiguration('z_pose', default='0.05'),
         'R': LaunchConfiguration('roll', default='0.00'),
         'P': LaunchConfiguration('pitch', default='0.00'),
@@ -61,6 +61,8 @@ def generate_launch_description():
 
     # -9, -1, 0.05, 0.00, 0.00, 0.0
     # -1, 6.1, 0.05, 0, 0, -3.142
+    # -5.5, 6, 0.05, 0, 0, 0
+    # 2.3, -0.8, ......
     
     robot = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(tb3_description_dir, 'launch', 'robot_state_publisher.launch.py')),
@@ -131,6 +133,6 @@ def generate_launch_description():
     ld.add_action(bringup_node)
 
     # ld.add_action(wormhole_db)
-    # ld.add_action(wormhole_action_server)
+    ld.add_action(wormhole_action_server)
 
     return ld
